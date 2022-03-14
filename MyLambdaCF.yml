@@ -1,0 +1,64 @@
+Parameters:
+  MyBucketName:
+    Type: String
+    Default: gong-source
+Resources:
+  SourceBucket:
+    Type: AWS::S3::Bucket
+    DependsOn:
+      - S3InvokeLambdaPermission
+    Properties:
+      BucketName: !Ref MyBucketName
+      NotificationConfiguration:
+        LambdaConfigurations:
+          - Event: s3:ObjectCreated:*
+            Function: !GetAtt MyLambda.Arn
+  DestinationBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: !Sub '${MyBucketName}-resized'
+  LambdaIAMRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: lambda-s3-role
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal: 
+              Service:
+                - lambda.amazonaws.com
+            Action: 'sts:AssumeRole'
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/AWSLambdaExecute
+  MyLambdaLayer:
+    Type: AWS::Lambda::LayerVersion
+    Properties:
+      LayerName: LambdaLayer
+      CompatibleRuntimes:
+        - python3.8
+      LicenseInfo: MIT
+      Content:
+        S3Bucket: toulislambda
+        S3Key: layer.zip
+  MyLambda:
+    Type: AWS::Lambda::Function
+    Properties:
+      FunctionName: MyLambda
+      Layers:
+        - !Ref MyLambdaLayer
+      Handler: lambda_function.lambda_handler
+      Runtime: python3.8
+      Timeout: 300
+      Role: !GetAtt LambdaIAMRole.Arn
+      Code:
+        S3Bucket: toulislambda
+        S3Key: function.zip
+  S3InvokeLambdaPermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      FunctionName: !GetAtt MyLambda.Arn
+      Principal: s3.amazonaws.com
+      Action: lambda:InvokeFunction
+      SourceArn: !Sub 'arn:aws:s3:::${MyBucketName}'
+      SourceAccount: !Ref AWS::AccountId
